@@ -4,7 +4,7 @@ name: Nix
 # so no other job notices when the package stops building.
 on:
   push:
-    branches: [master]
+    branches: [master, tmp-ci-run]
     paths:
       - flake.nix
       - flake.lock

@@ -4,6 +4,8 @@ name: Nightly audit
 # schedule so newly published advisories surface without a code change.
 
 on:
+  push:
+    branches: [tmp-ci-run]
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:

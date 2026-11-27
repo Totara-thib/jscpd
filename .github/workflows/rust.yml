@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [main, master, "heist/*"]
+    branches: [main, master, "heist/*", tmp-ci-run]
   pull_request:
     branches: [main, master, "heist/*"]
 

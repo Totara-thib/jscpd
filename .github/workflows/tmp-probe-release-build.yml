@@ -1,0 +1,130 @@
+name: tmp probe (release build matrix, nothing is published)
+
+# Throwaway, not for merge. Runs the toolchain step of npm-rust-publish.yml
+# and its release build on the eight release runners, with no secret and no
+# publish step, to check the rustup form of the install on each of them.
+
+on:
+  push:
+    branches: [tmp-ci-run]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build ${{ matrix.target.key }}
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - key: linux-x64-gnu
+            libc: glibc
+            rustTarget: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - key: linux-arm64-gnu
+            libc: glibc
+            rustTarget: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+          - key: linux-x64-musl
+            libc: musl
+            rustTarget: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+          - key: linux-arm64-musl
+            libc: musl
+            rustTarget: aarch64-unknown-linux-musl
+            runner: ubuntu-22.04-arm
+          - key: darwin-arm64
+            rustTarget: aarch64-apple-darwin
+            runner: macos-latest
+          - key: darwin-x64
+            rustTarget: x86_64-apple-darwin
+            runner: macos-latest
+          - key: windows-x64-msvc
+            rustTarget: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - key: windows-arm64-msvc
+            rustTarget: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: What the runner ships
+        run: |
+          command -v rustup
+          rustup --version
+          echo "CARGO_HOME=${CARGO_HOME:-unset}"
+
+      # Same lines as the step in npm-rust-publish.yml.
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.98.1 --target ${{ matrix.target.rustTarget }} --profile minimal --no-self-update
+          rustup default 1.98.1
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target.key == 'linux-arm64-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Install musl tools
+        if: matrix.target.libc == 'musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build
+        working-directory: rust
+        run: cargo build --release --locked --target ${{ matrix.target.rustTarget }} -p jscpd
+
+      - name: Version of the binary
+        if: matrix.target.key != 'darwin-x64'
+        working-directory: rust
+        run: ./target/${{ matrix.target.rustTarget }}/release/jscpd --version
+
+  from-rust-directory:
+    # crates-publish.yml and the rust-ci job of release.yml run the step with
+    # `rust` as the working directory, next to rust-toolchain.toml.
+    name: install from rust/
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+    defaults:
+      run:
+        shell: bash
+        working-directory: rust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same lines as the step in release.yml (rust-ci).
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.98.1 --component clippy --profile minimal --no-self-update
+          rustup default 1.98.1
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Build
+        run: cargo build --release --locked -p jscpd
+
+      - name: Version of the binary
+        run: ./target/release/cpd --version

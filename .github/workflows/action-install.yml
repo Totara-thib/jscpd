@@ -1,4 +1,5 @@
 name: GitHub Action install
+# tmp-ci-run: this line only makes the path filter below match.
 
 on:
   push:
